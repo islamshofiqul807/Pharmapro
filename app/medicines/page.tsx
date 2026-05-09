@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, Search, Package, Edit, Trash2, AlertCircle } from "lucide-react";
+import { Plus, Search, Package, Edit, Trash2, AlertCircle, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,16 +12,17 @@ import { createClient } from "@/lib/supabase/client";
 import { MEDICINE_CATEGORIES, MEDICINE_UNITS } from "@/lib/constants";
 import { formatCurrency, cn } from "@/utils";
 import { toast } from "@/hooks/use-toast";
+import { CameraScanInventory } from "@/components/features/camera-scan-inventory";
 
 type Medicine = {
   id: string; name: string; generic_name: string; brand: string;
   category: string; unit: string; purchase_price: number; sale_price: number;
-  stock_qty: number; reorder_level: number; rack_location: string;
+  stock_qty: number; reorder_level: number; rack_location: string; barcode?: string;
 };
 
 const empty: Omit<Medicine, "id"> = {
   name: "", generic_name: "", brand: "", category: "tablet", unit: "strip",
-  purchase_price: 0, sale_price: 0, stock_qty: 0, reorder_level: 10, rack_location: "",
+  purchase_price: 0, sale_price: 0, stock_qty: 0, reorder_level: 10, rack_location: "", barcode: "",
 };
 
 export default function MedicinesPage() {
@@ -33,6 +34,7 @@ export default function MedicinesPage() {
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [pharmacyId, setPharmacyId] = useState<string>("");
+  const [scanOpen, setScanOpen] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -49,7 +51,7 @@ export default function MedicinesPage() {
   }
 
   function openAdd() { setEditing(null); setForm(empty); setOpen(true); }
-  function openEdit(m: Medicine) { setEditing(m); setForm({ name: m.name, generic_name: m.generic_name, brand: m.brand, category: m.category, unit: m.unit, purchase_price: m.purchase_price, sale_price: m.sale_price, stock_qty: m.stock_qty, reorder_level: m.reorder_level, rack_location: m.rack_location }); setOpen(true); }
+  function openEdit(m: Medicine) { setEditing(m); setForm({ name: m.name, generic_name: m.generic_name, brand: m.brand, category: m.category, unit: m.unit, purchase_price: m.purchase_price, sale_price: m.sale_price, stock_qty: m.stock_qty, reorder_level: m.reorder_level, rack_location: m.rack_location, barcode: m.barcode ?? "" }); setOpen(true); }
 
   async function save() {
     if (!form.name || !pharmacyId) return;
@@ -72,6 +74,19 @@ export default function MedicinesPage() {
     else { toast({ title: "Medicine deleted" }); fetchData(); }
   }
 
+  function handleScanFound(medicine: Medicine) {
+    // Medicine already in inventory — open its edit form
+    openEdit(medicine);
+    toast({ title: "Medicine found", description: medicine.name });
+  }
+
+  function handleScanAddNew(prefill: { barcode: string }) {
+    // Not in inventory yet — open add form with barcode pre-filled
+    setEditing(null);
+    setForm({ ...empty, barcode: prefill.barcode });
+    setOpen(true);
+  }
+
   const filtered = medicines.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
     m.generic_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -87,7 +102,12 @@ export default function MedicinesPage() {
           <h1 className="text-2xl font-bold">Medicines <span className="text-muted-foreground font-normal text-lg">/ ওষুধ</span></h1>
           <p className="text-sm text-muted-foreground mt-0.5">{medicines.length} medicines in inventory</p>
         </div>
-        <Button onClick={openAdd} className="gap-2"><Plus className="h-4 w-4" />Add medicine</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setScanOpen(true)} className="gap-2">
+            <Camera className="h-4 w-4" />Scan to add
+          </Button>
+          <Button onClick={openAdd} className="gap-2"><Plus className="h-4 w-4" />Add manually</Button>
+        </div>
       </div>
 
       <div className="flex gap-3">
@@ -176,6 +196,7 @@ export default function MedicinesPage() {
               <div className="space-y-1.5"><Label>Reorder level</Label><Input type="number" min={0} value={form.reorder_level} onChange={e => f("reorder_level", e.target.value)} /></div>
             </div>
             <div className="space-y-1.5"><Label>Rack location</Label><Input placeholder="A-12" value={form.rack_location} onChange={e => f("rack_location", e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Barcode <span className="text-muted-foreground text-xs">(optional)</span></Label><Input placeholder="Scan or type barcode..." value={form.barcode ?? ""} onChange={e => f("barcode", e.target.value)} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -183,6 +204,14 @@ export default function MedicinesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CameraScanInventory
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        pharmacyId={pharmacyId}
+        onMedicineFound={handleScanFound}
+        onAddNew={handleScanAddNew}
+      />
     </div>
   );
 }
